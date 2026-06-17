@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iperf3 Monitor</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231a1d27'/><polyline points='3,26 9,18 16,22 23,10 29,15' fill='none' stroke='%234ade80' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/><circle cx='29' cy='15' r='2.5' fill='%234ade80'/></svg>">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f1117; color: #e0e0e0; font-family: system-ui, sans-serif; padding: 24px; }
+  h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 0.85rem; margin-bottom: 24px; }
+  .cards { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+  .card { background: #1a1d27; border-radius: 10px; padding: 20px 24px; flex: 1; min-width: 160px; }
+  .card-label { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .card-value { font-size: 2rem; font-weight: 700; }
+  .card-value.green { color: #4ade80; }
+  .card-value.blue { color: #60a5fa; }
+  .card-value.orange { color: #fb923c; }
+  .card-value.red { color: #f87171; }
+  .card-unit { font-size: 0.9rem; color: #888; margin-left: 4px; }
+  .chart-box { background: #1a1d27; border-radius: 10px; padding: 20px; margin-bottom: 24px; }
+  .chart-box h2 { font-size: 0.9rem; color: #aaa; margin-bottom: 16px; }
+  .chart-wrap { position: relative; height: 220px; }
+  table { width: 100%; border-collapse: collapse; background: #1a1d27; border-radius: 10px; overflow: hidden; }
+  th { background: #13151f; text-align: left; padding: 10px 14px; font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em; }
+  td { padding: 10px 14px; font-size: 0.85rem; border-top: 1px solid #1e2130; }
+  tr:hover td { background: #1e2130; }
+  .error-cell { color: #f87171; font-size: 0.8rem; }
+  .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status.ok { background: #4ade80; }
+  .status.err { background: #f87171; }
+  #refresh-info { font-size: 0.75rem; color: #444; margin-top: 12px; text-align: right; }
+</style>
+</head>
+<body>
+<h1>iperf3 Monitor</h1>
+<p class="subtitle" id="server-label">Loading...</p>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-label">Latest sent</div>
+    <div class="card-value green" id="val-sent">—<span class="card-unit">Mbps</span></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Latest received</div>
+    <div class="card-value blue" id="val-recv">—<span class="card-unit">Mbps</span></div>
+  </div>
+  <div class="card">
+    <div class="card-label">RTT</div>
+    <div class="card-value orange" id="val-rtt">—<span class="card-unit">ms</span></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Retransmits</div>
+    <div class="card-value" id="val-retx">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Measurements</div>
+    <div class="card-value" id="val-count">—</div>
+  </div>
+</div>
+
+<div class="chart-box">
+  <h2>Bandwidth over time (last 60 measurements)</h2>
+  <div class="chart-wrap"><canvas id="chart"></canvas></div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Time</th>
+      <th>Server</th>
+      <th>Sent (Mbps)</th>
+      <th>Received (Mbps)</th>
+      <th>RTT (ms)</th>
+      <th>Retransmits</th>
+    </tr>
+  </thead>
+  <tbody id="table-body"></tbody>
+</table>
+<p id="refresh-info"></p>
+
+<script>
+let chart;
+
+function fmt(v, decimals = 1) {
+  return v != null ? Number(v).toFixed(decimals) : '—';
+}
+
+function timeAgo(isoStr) {
+  const d = new Date(isoStr);
+  const diff = Math.round((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  return d.toLocaleTimeString();
+}
+
+function initChart(labels, sent, recv) {
+  const ctx = document.getElementById('chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Sent (Mbps)',
+          data: sent,
+          borderColor: '#4ade80',
+          backgroundColor: 'rgba(74,222,128,0.08)',
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.3,
+          fill: true,
+        },
+        {
+          label: 'Received (Mbps)',
+          data: recv,
+          borderColor: '#60a5fa',
+          backgroundColor: 'rgba(96,165,250,0.08)',
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.3,
+          fill: true,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#aaa', boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { color: '#555', maxTicksLimit: 10 }, grid: { color: '#1e2130' } },
+        y: { ticks: { color: '#555' }, grid: { color: '#1e2130' }, title: { display: true, text: 'Mbps', color: '#555' } },
+      },
+    },
+  });
+}
+
+function updateChart(labels, sent, recv) {
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = sent;
+  chart.data.datasets[1].data = recv;
+  chart.update('none');
+}
+
+async function load() {
+  const res = await fetch('/api/results');
+  const all = await res.json();
+
+  document.getElementById('val-count').textContent = all.length;
+
+  const ok = all.filter(r => !r.error);
+  if (ok.length > 0) {
+    const latest = ok[ok.length - 1];
+    document.getElementById('server-label').textContent = `Server: ${latest.server}`;
+    document.getElementById('val-sent').innerHTML = `${fmt(latest.sent_mbps)}<span class="card-unit">Mbps</span>`;
+    document.getElementById('val-recv').innerHTML = `${fmt(latest.received_mbps)}<span class="card-unit">Mbps</span>`;
+    document.getElementById('val-rtt').innerHTML = `${fmt(latest.rtt_ms)}<span class="card-unit">ms</span>`;
+    document.getElementById('val-retx').textContent = latest.retransmits ?? '—';
+  }
+
+  const recent = ok.slice(-60);
+  const labels = recent.map(r => timeAgo(r.timestamp));
+  const sent = recent.map(r => r.sent_mbps);
+  const recv = recent.map(r => r.received_mbps);
+
+  if (!chart) initChart(labels, sent, recv);
+  else updateChart(labels, sent, recv);
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = all.slice().reverse().slice(0, 100).map(r => `
+    <tr>
+      <td>${timeAgo(r.timestamp)}</td>
+      <td>${r.server}</td>
+      ${r.error
+        ? `<td colspan="4" class="error-cell"><span class="status err"></span>${r.error}</td>`
+        : `<td><span class="status ok"></span>${fmt(r.sent_mbps)}</td>
+           <td>${fmt(r.received_mbps)}</td>
+           <td>${fmt(r.rtt_ms)}</td>
+           <td>${r.retransmits ?? '—'}</td>`
+      }
+    </tr>
+  `).join('');
+
+  document.getElementById('refresh-info').textContent =
+    `Last updated: ${new Date().toLocaleTimeString()} · auto-refresh every 30s`;
+}
+
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

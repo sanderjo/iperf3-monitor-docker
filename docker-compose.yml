@@ -1,0 +1,14 @@
+services:
+  iperf3-monitor:
+    build: .
+    environment:
+      - IPERF3_SERVER=ams.speedtest.clouvider.net # your.iperf3.server
+      - IPERF3_PORT=5201
+    ports:
+      - "8080:8080"
+    volumes:
+      - iperf3-data:/data
+    restart: unless-stopped
+
+volumes:
+  iperf3-data:
