@@ -8,6 +8,12 @@ Runs iperf3 speed tests every 5 minutes and displays results in a web UI.
 docker compose up -d
 ```
 
+To (re)build the image:
+
+```bash
+docker compose up --build
+```
+
 Then open [http://localhost:8080](http://localhost:8080).
 
 Edit `docker-compose.yml` to point at your own iperf3 server:
@@ -17,6 +23,8 @@ environment:
   - IPERF3_SERVER=your.iperf3.server
   - IPERF3_PORT=5201
 ```
+
+![iperf3 Monitor screenshot](screenshot%20iperf3%20monitor.png)
 
 ## How it works
 
